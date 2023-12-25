@@ -2,12 +2,16 @@ import instagrapi
 import requests
 
 class dInstagram():
-    def __init__(self, userId, username=None, password=None):
+    def __init__(self, postUrl=None, username=None, password=None):
         self.username=username
-        self.insta=instagrapi.client()
+        self.insta=instagrapi.Client()
         self.password=password
-        self.userId=userId
+        self.postUrl=postUrl
+        self.id=None
     
+    def setUrl(self, url):
+        self.postUrl=url
+
     def getContentType(self, url):
         res=requests.get(url)
         if res.content:
@@ -20,33 +24,84 @@ class dInstagram():
             self.insta.login(self.username, self.password)
         except Exception as e:
             print(e)
+            return e
 
-    def getResourceId(self, url):
+    def getId(self):
         try:
-            return self.insta.media_pk_url(url)
+            self.id=self.insta.media_pk_from_url(self.postUrl)
+            return self.id
+        except instagrapi.exceptions.LoginRequired as e:
+            print("Error: {} trying after logging in.".format(e))
+            return e
         except Exception as e:
-            print("Error: {} trying after logging in.")
+            print("Unexpected error:", e)
+            return e
 
-    def getContentUrl(self, url):
-        self.insta
+    def getResources(self):
+        try:
+            self.getId()
+            resources=self.insta.media_info(self.id).resources
+            return resources
+        except instagrapi.exceptions.LoginRequired as e:
+            print("Error: {} trying after logging in.".format(e))
+            return e
+        except Exception as e:
+            print('Failed to fetch media info with error :',str(e))
+            return e
 
-    def downloadPost(self, url):
-        
-    
-    def downloadProfile():
-        pass
+    def mediaType(self):
+        try:
+            self.getId()
+            mtype=self.insta.media_info(self.id).media_type
+            if mtype==1:
+                return "Photo"
+            elif mtype==2:
+                if self.insta.media_info(self.id).product_type=="feed":
+                    return "Video"
+                elif self.insta.media_info(self.id).product_type=="igtv":
+                    return "IGTV"
+                elif self.insta.media_info(self.id).product_type=="clips":
+                    return "Clips"
+            elif mtype==8:
+                return "Album"
+        except instagrapi.exceptions.LoginRequired as e:
+            print("Error: {} trying after logging in.".format(e))
+            return e
+        except Exception as e:
+            print('Failed to fetch media info with error :',str(e))
+            return e
 
-    def downloadStory():
-        pass
+    def save(self, url, id):
+        contentType=self.getContentType(url)
+        filename=self.insta.media_info(id).id+'.'+contentType.split('/')[1]
+        res=requests.get(url)
+        with open(filename, "wb") as f:
+            f.write(res.content)
 
-    def downloadIgtv():
-        pass
+    def download(self):
+        try:
+            type=self.mediaType()
+            if type=="Photo":
+                url=self.insta.media_info(self.id).thumbnail_url
+                self.save(url, self.id)
+            elif type=="Video":
+                url=self.insta.media_info(self.id).video_url
+                self.save(url, self.id)
+            elif type=="Album":
+                resources=self.getResources()
+                for r in resources:
+                    url=r.thumbnail_url
+                    id=r.pk
+                    self.save(url, id)
+        except instagrapi.exceptions.LoginRequired as e:
+            print("Error: {} trying after logging in.".format(e))
+            return e
+        except Exception as e:
+            print('Failed to fetch media info with error :',str(e))
+            return e
 
-    def instaLogin(self, user, password):
-        self.insta.login(user, password)
-
-    def downloaderFromHashtags(self, hastag, since, until):
-        posts=self.insta.Hashtag.from_name(self.insta.context, hastag).get_posts()
-        since = datetime(since)  # further from today, inclusive
-        until = datetime(until)  # closer to today, not inclusive
+    # def downloaderFromHashtags(self, hastag, since, until):
+    #     posts=self.insta.Hashtag.from_name(self.insta.context, hastag).get_posts()
+    #     since = datetime(since)  # further from today, inclusive
+    #     until = datetime(until)  # closer to today, not inclusive
         
