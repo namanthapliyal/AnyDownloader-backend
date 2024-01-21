@@ -5,36 +5,58 @@ from pytube import Channel
 class dVideo():
     def __init__(self, url):
         self.yt=YouTube(url)
-        self.title=self.yt.title
-        self.audioTag=None
-        self.videoTag=None
+        self.ITag=None
         self.caption=None
         self.lang=None
 
     def getTitle(self):
-        return self.title
+        try:
+            return [True, self.yt.title]
+        except Exception as e:
+            print(e)
+            return [False, e]
     
     def getCaptions(self):
-        self.yt.streams.first()
-        return self.yt.captions
+        try:
+            self.yt.streams.first()
+            return [True, self.yt.captions]
+        except Exception as e:
+            print(e)
+            return [False, e]
 
     def setCaptionLang(self, lang):
         self.capLang=lang
+        return [True, self.capLang]
 
     def downloadCaptions(self):
-        return self.caption['self.capLang'].download(self.title)
+        try:
+            return [True, self.caption[self.capLang].download(self.title)]
+        except Exception as e:
+            print(e)
+            return [False, e]
     
     def getStreams(self):
-        return self.yt.streams
+        try:   
+            return [True, self.yt.streams]
+        except Exception as e:
+            print(e)
+            return [False, e] 
 
-    def setAudioTag(self, itag):
-        self.audioTag=self.yt.streams.get_by_itag(itag)
-    
-    def setVideoTag(self, itag):
-        self.videoTag=self.yt.streams.get_by_itag(itag)
+    def setITag(self, itag):
+        try:
+            self.ITag=self.yt.streams.get_by_itag(itag)
+            return [True, self.ITag]
+        except Exception as e:
+            print(e)
+            return [False, e] 
 
-    def download(self, itag):
-        return itag.download()
+    def download(self):
+        try:
+            self.itag.download()
+            return [True, None]
+        except Exception as e:
+            print(e)
+            return [False, e] 
 
 class dPlaylist():
     def __init__(self, url):
@@ -43,16 +65,25 @@ class dPlaylist():
         self.res=None
 
     def getTitle(self):
-        return self.title
+        try:
+            return [True, self.p.title]
+        except Exception as e:
+            print(e)
+            return [False, e]
     
-    def setQuality(self):
-        quality=[]
-        for i in self.p.videos:
-            quality.append(i.streams[0].resolution)
-        return quality
+    def getQuality(self):
+        try:
+            quality=[]
+            for i in self.p.videos:
+                quality.append(i.streams[0].resolution)
+            return [True, quality]
+        except Exception as e:
+            print(e)
+            return [False, e]
 
     def setQuality(self, res):
         self.res=res
+        return [True, self.res]
 
     def downloadVideos(self):
         try:
@@ -60,8 +91,10 @@ class dPlaylist():
                 itag=i.streams.filter(progressive=True, res=self.res)
                 video=i.streams.get_by_itag()
                 video.download()
+            return [True, None]
         except Exception as e:
             print("Error: {}".format(e))
+            return [False, e]
 
 # class dChannel():
 #     def __init__(self, url) -> None:
