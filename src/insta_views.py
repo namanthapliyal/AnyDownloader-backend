@@ -1,18 +1,16 @@
+from flask import Blueprint, request, jsonify
+from .models import obj_table
 import instagrapi
 import requests
+from . import db 
 
 class dInstagram():
-    def __init__(self, postUrl=None, username=None, password=None):
+    def __init__(self, postUrl, username=None, password=None):
         self.username=username
         self.insta=instagrapi.Client()
         self.password=password
         self.postUrl=postUrl
         self.id=None
-    
-    #main
-    def setUrl(self, url):
-        self.postUrl=url
-        return [True, None]
 
     def getContentType(self, url):
         res=requests.get(url)
@@ -21,12 +19,6 @@ class dInstagram():
         else:
             return [False, res.status_code]
 
-    def setUserandPass(self, username, password):
-        self.username=username
-        self.password=password
-        return [True, None]
-
-    #main
     def login(self, username, password):
         try:
             self.setUserandPass(username, password)
@@ -152,3 +144,78 @@ class dInstagram():
         except Exception as e:
             print('Failed to fetch media info with error :',str(e))
             return [False, e]
+
+
+insta_views = Blueprint('insta_views', __name__)
+
+@insta_views.route('/', methods=['POST'])
+def create_obj():
+    try:
+        url = request.form.get('url')
+        obj = obj_table(url=url)
+        if request.form.get('username', 0):
+            obj.username = request.form.get('username')
+        if request.form.get('password', 0):
+            obj.password = request.form.get('password')
+        db.session.add(obj)
+        db.session.commit()
+        return jsonify({"messages": "Initialized state of the object.", "id": obj.id})
+    except Exception as e:
+        return jsonify({"messages": e}), 500
+    
+@insta_views.route('/login/<int:id>', methods=['PATCH'])   
+def login(id):
+    try:
+        obj = obj_table.query.get(id)
+        ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
+        username = request.form.get('username')
+        password = request.form.get('password')
+        status, res = ins.login(username=username, password=password)
+        if not status:
+            return jsonify({"messages": res}), 401
+        obj.username = username
+        obj.password = password
+        db.session.commit()
+        return jsonify({"messages": "Login successful."}), 200   
+    except Exception as e:
+        return jsonify({"messages": e}), 500
+
+@insta_views.route('/<int:id>/resources', methods=['GET'])
+def getResources(id):
+    try:
+        obj = obj_table.query.get(id)
+        ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
+        status, res = ins.getResources()
+        if status:
+            return jsonify(res), 200
+        else:
+            return jsonify({"messages": res}), 500
+    except Exception as e:
+        return jsonify({"messages": e}), 500
+    
+@insta_views.route('/<int:id>/getmediatype', methods=['GET'])
+def getMediaType(id):
+    try:
+        obj = obj_table.query.get(id)
+        ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
+        status, res = ins.mediaType()
+        if status:
+            return jsonify(res), 200
+        else:
+            return jsonify({"messages": res}), 500
+    except Exception as e:
+        return jsonify({"messages": e}), 500
+
+@insta_views.route('/<int:id>/download') 
+def download():
+    try:
+        obj = obj_table.query.get(id)
+        ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
+        status, res = ins.download()
+        if status:
+            return jsonify({"messages": res}), 201
+        else:
+            return jsonify({"messages": res}), 500
+    except Exception as e:
+        return jsonify({"messages": e}), 500
+
