@@ -3,9 +3,11 @@ from pytube import Playlist
 from pytube import Channel
 from flask import Blueprint, request, jsonify, send_file
 from . import db 
-from .models import obj_table
+from .models import obj_table, media
 import zipfile
 import os
+
+download_path = os.path.join(os.getcwd(), 'downloads')
 
 class dVideo():
     def __init__(self, url):
@@ -29,7 +31,8 @@ class dVideo():
     def downloadCaption(self, lang):
         try:
             self.yt.streams.first()
-            return [True, self.yt.captions[lang].download(self.yt.title)]
+            filepath=self.yt.captions[lang].download(title=self.yt.title, output_path=download_path)
+            return [True, filepath]
         except Exception as e:
             print(e)
             return [False, e]
@@ -43,7 +46,7 @@ class dVideo():
 
     def download(self, itag):
         try: 
-            return [True, self.yt.streams.get_by_itag(itag).download()]
+            return [True, self.yt.streams.get_by_itag(itag).download(output_path=download_path)]
         except Exception as e:
             print(e)
             return [False, e] 
@@ -84,7 +87,7 @@ class dPlaylist():
             for i in self.p.videos:
                 itag=i.streams.filter(progressive=True, res=res)[0].itag
                 video=i.streams.get_by_itag(itag)
-                videos.append(video.download())
+                videos.append(video.download(output_path=download_path))
             return [True, videos]
         except Exception as e:
             print("Error: {}".format(e))
@@ -146,7 +149,10 @@ def downloadCaption(id):
         status, res =  vid.downloadCaption(lang)
         #print(status,res)
         if status:
-            return send_file(str(res), as_attachment=True)
+            med = media(media_path=res, resource_id=id)
+            db.session.add(med)
+            db.session.commit()           
+            return send_file(res, as_attachment=True)
         else:
             raise Exception(res)
     except Exception as e:
@@ -191,6 +197,9 @@ def download_itag(id, itag):
         vid = dVideo(obj.url)
         status, res =  vid.download(itag)
         if status:
+            med = media(media_path=res, resource_id=id)
+            db.session.add(med)
+            db.session.commit()
             return send_file(res, as_attachment=True)
         else:
             raise Exception(res)
@@ -262,7 +271,7 @@ def download(id, resolution):
         # Download videos
         status, download_result = pl.downloadVideos(resolution)
 
-        zip_file_path = os.path.join(os.getcwd(), 'download.zip')
+        zip_file_path = os.path.join(download_path, 'download{}.zip'.format(id))
         if status:
             with zipfile.ZipFile(zip_file_path, 'w') as zipf:
                 for file_path in download_result:
@@ -270,7 +279,9 @@ def download(id, resolution):
                     file_name = os.path.basename(file_path)
                     # Add the file to the ZIP file without any directory structure
                     zipf.write(file_path, arcname=file_name)
-
+            med = media(media_path=zip_file_path, resource_id=id)
+            db.session.add(med)
+            db.session.commit()
             return send_file(zip_file_path, as_attachment=True, download_name='files.zip')
         else:
             raise Exception(download_result)

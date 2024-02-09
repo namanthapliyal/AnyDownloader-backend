@@ -1,8 +1,11 @@
 from flask import Blueprint, request, jsonify
-from .models import obj_table
+from .models import obj_table, media
 import instagrapi
 import requests
 from . import db 
+import os
+
+download_path = os.path.join(os.getcwd(), 'downloads')
 
 class dInstagram():
     def __init__(self, postUrl, username=None, password=None):
@@ -43,7 +46,8 @@ class dInstagram():
         try:
             status, id = self.getId()
             if(status):
-                resources=self.insta.media_info(self.id).resources
+                resources=self.insta.media_info(id).resources
+                print(resources)
                 return [True, resources]
             else:
                 raise Exception("Setting of the resource id failed.")
@@ -58,15 +62,15 @@ class dInstagram():
         try:
             status, id = self.getId()
             if(status):
-                mtype=self.insta.media_info(self.id).media_type
+                mtype=self.insta.media_info(id).media_type
                 if mtype==1:
                     return [True, "Photo"]
                 elif mtype==2:
-                    if self.insta.media_info(self.id).product_type=="feed":
+                    if self.insta.media_info(id).product_type=="feed":
                         return [True, "Video"]
-                    elif self.insta.media_info(self.id).product_type=="igtv":
+                    elif self.insta.media_info(id).product_type=="igtv":
                         return [True, "IGTV"]
-                    elif self.insta.media_info(self.id).product_type=="clips":
+                    elif self.insta.media_info(id).product_type=="clips":
                         return [True, "Clips"]
                 elif mtype==8:
                     return [True, "Album"]
@@ -84,10 +88,16 @@ class dInstagram():
             status, contentType=self.getContentType(url)
             if(status):
                 filename=self.insta.media_info(id).id+'.'+contentType.split('/')[1]
+                filepath=download_path
+                full_path = os.path.join(filepath, filename)
+                print("filepath ye ra:{}".format(full_path))
                 res=requests.get(url)
-                with open(filename, "wb") as f:
+                with open(full_path, "wb") as f:
                     f.write(res.content)
-                return [True, "File saved at: "+filename]
+                med = media(media_path=full_path, resource_id=id)
+                db.session.add(med)
+                db.session.commit()
+                return [True, "File saved at: "+full_path]
             else:
                 raise Exception("URL is not valid or doesn't contain a file.")
         except Exception as e:
@@ -135,6 +145,14 @@ class dInstagram():
                             raise Exception("Not all files in Album are downloaded.")
                     else:
                         raise Exception("No resources found in the album.")
+                elif type=="Clips":
+                    url=self.insta.media_info(self.id).video_url
+                    status2, res= self.save(url, self.id)
+                    if(status2):
+                        print("Download clips success!")
+                    else:
+                        print("Download failed.")
+                        raise Exception("Download failed.")
                 return [True, res]
             else:
                 raise Exception("Failed to load the type of the resource.")
@@ -186,6 +204,7 @@ def getResources(id):
         obj = obj_table.query.get(id)
         ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
         status, res = ins.getResources()
+        print(status, res)
         if status:
             return jsonify(res), 200
         else:
@@ -207,7 +226,7 @@ def getMediaType(id):
         return jsonify({"messages": e}), 500
 
 @insta_views.route('/<int:id>/download') 
-def download():
+def download(id):
     try:
         obj = obj_table.query.get(id)
         ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
@@ -215,7 +234,7 @@ def download():
         if status:
             return jsonify({"messages": res}), 201
         else:
-            return jsonify({"messages": res}), 500
+            return jsonify({"messages": str(res)}), 500
     except Exception as e:
         return jsonify({"messages": e}), 500
 

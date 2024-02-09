@@ -20,7 +20,7 @@ def create_app():
     app.register_blueprint(utube_views, url_prefix='/utube')
     app.register_blueprint(internet_views, url_prefix='/internet')
 
-    from .models import obj_table
+    from .models import obj_table, media
     with app.app_context():
         db.create_all()
     return app

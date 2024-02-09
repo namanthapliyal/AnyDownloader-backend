@@ -1,8 +1,11 @@
 import requests
 import mimetypes
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from . import db 
-from .models import obj_table
+from .models import obj_table, media
+import os
+
+download_path = os.path.join(os.getcwd(), 'downloads')
 
 class dInternet():
     def __init__(self, url):
@@ -22,16 +25,16 @@ class dInternet():
         except Exception as e:
             return [False, e]
     
-    def download(self, filename='download'):
+    def download(self, id, filename='download'):
         try:
             status, res = self.getExt()
             if status:
                 response=requests.get(self.url)
-                filename+='.{}'.format(res)
+                filepath = os.path.join(download_path, '{}.{}'.format(filename+id, res))
                 if response.status_code==200:
-                    with open(filename, 'wb') as f:
+                    with open(filepath, 'wb') as f:
                         f.write(response.content)
-                    return [True, "File saved into "+filename]
+                    return [True, filepath]
                 else:
                     raise Exception("Cannot get the resonse for the supplied URL.")
             else:
@@ -54,14 +57,17 @@ def create_url():
         return jsonify({"messages": e}), 500
 
 @internet_views.route('/<int:id>/download', methods=['GET'])
-def download():
+def download(id):
     try:
         obj = obj_table.query.get(id)
         internet = dInternet(obj.url)
-        status, res = internet.download()
+        status, res = internet.download(id=id)
         if status:
-            return jsonify({"messages": res}), 200
+            med = media(media_path=res, resource_id=id)
+            db.session.add(med)
+            db.session.commit()            
+            return send_file(res, as_attachment=True)
         else:
-            raise Exception(e)
+            raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
