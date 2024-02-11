@@ -30,7 +30,7 @@ class dInternet():
             status, res = self.getExt()
             if status:
                 response=requests.get(self.url)
-                filepath = os.path.join(download_path, '{}.{}'.format(filename+id, res))
+                filepath = os.path.join(download_path, '{}.{}'.format(filename+str(id), res))
                 if response.status_code==200:
                     with open(filepath, 'wb') as f:
                         f.write(response.content)
@@ -49,6 +49,9 @@ internet_views = Blueprint('internet_views', __name__)
 def create_url():
     try:
         url = request.form.get('url')
+        obj = obj_table.query.filter_by(url=url).first()
+        if obj:
+            return jsonify({'messages': 'Object already present in db.', "id": obj.id})
         obj = obj_table(url=url)
         db.session.add(obj)
         db.session.commit()
@@ -61,9 +64,13 @@ def download(id):
     try:
         obj = obj_table.query.get(id)
         internet = dInternet(obj.url)
+        mobj = media.query.filter_by(resource_id=obj.id).first()
+        if mobj and os.path.exists(mobj.media_path):
+            print("Media already exists.")
+            return send_file(mobj.media_path, as_attachment=True)
         status, res = internet.download(id=id)
         if status:
-            med = media(media_path=res, resource_id=id)
+            med = media(media_path=res, resource_id=id, rtype=internet.getType()[1])
             db.session.add(med)
             db.session.commit()            
             return send_file(res, as_attachment=True)

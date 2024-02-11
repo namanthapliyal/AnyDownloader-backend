@@ -99,6 +99,9 @@ utube_views = Blueprint('utube_views', __name__)
 def create_url():
     try:
         url = request.form.get('url')
+        obj = obj_table.query.filter_by(url=url).first()
+        if obj:
+            return jsonify({'messages': 'Object already present in db.', "id": obj.id})
         obj = obj_table(url=url)
         db.session.add(obj)
         db.session.commit()
@@ -144,12 +147,16 @@ def downloadCaption(id):
         obj = obj_table.query.get(id)
         if not obj:
             return jsonify({"messages": "Not a valid id."}), 404
+        mobj = media.query.filter(media.rtype=="caption", media.resource_id==obj.id).first()
+        if mobj and os.path.exists(mobj.media_path):
+            print("Media already exists.")
+            return send_file(mobj.media_path, as_attachment=True)
         vid = dVideo(obj.url)
         lang= request.args.get('caption_lang', default='', type=str)
         status, res =  vid.downloadCaption(lang)
         #print(status,res)
         if status:
-            med = media(media_path=res, resource_id=id)
+            med = media(media_path=res, resource_id=id, rtype = "caption")
             db.session.add(med)
             db.session.commit()           
             return send_file(res, as_attachment=True)
@@ -194,10 +201,14 @@ def download_itag(id, itag):
         obj = obj_table.query.get(id)
         if not obj:
             return jsonify({"messages": "Not a valid id."}), 404
+        mobj = media.query.filter(media.rtype == 'video',media.resource_id==obj.id).first()
+        if mobj and os.path.exists(mobj.media_path):
+            print("Media already exists.")
+            return send_file(mobj.media_path, as_attachment=True)
         vid = dVideo(obj.url)
         status, res =  vid.download(itag)
         if status:
-            med = media(media_path=res, resource_id=id)
+            med = media(media_path=res, resource_id=id, rtype = 'video')
             db.session.add(med)
             db.session.commit()
             return send_file(res, as_attachment=True)
@@ -257,7 +268,10 @@ def download(id, resolution):
         obj = obj_table.query.get(id)
         if not obj:
             return jsonify({"message": "Not a valid id."}), 404
-
+        mobj = media.query.filter(media.rtype=='zip', media.resource_id==obj.id).first()
+        if mobj and os.path.exists(mobj.media_path):
+            print("Media already exists.")
+            return send_file(mobj.media_path, as_attachment=True)
         pl = dPlaylist(obj.url)
 
         # Validate resolution
@@ -279,7 +293,7 @@ def download(id, resolution):
                     file_name = os.path.basename(file_path)
                     # Add the file to the ZIP file without any directory structure
                     zipf.write(file_path, arcname=file_name)
-            med = media(media_path=zip_file_path, resource_id=id)
+            med = media(media_path=zip_file_path, resource_id=id, rtype='zip')
             db.session.add(med)
             db.session.commit()
             return send_file(zip_file_path, as_attachment=True, download_name='files.zip')

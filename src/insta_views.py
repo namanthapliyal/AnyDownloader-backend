@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from .models import obj_table, media
 import instagrapi
 import requests
 from . import db 
 import os
+import zipfile
 
 download_path = os.path.join(os.getcwd(), 'downloads')
 
@@ -24,7 +25,8 @@ class dInstagram():
 
     def login(self, username, password):
         try:
-            self.setUserandPass(username, password)
+            self.username=username
+            self.password=password
             self.insta.login(self.username, self.password)
             return [True, None]
         except Exception as e:
@@ -43,12 +45,14 @@ class dInstagram():
             return [False, e]
 
     def getResources(self):
+        def serialize_resource(resource):
+            return resource.json()
         try:
             status, id = self.getId()
             if(status):
                 resources=self.insta.media_info(id).resources
-                print(resources)
-                return [True, resources]
+                res = [serialize_resource(resource) for resource in resources]
+                return [True, res]
             else:
                 raise Exception("Setting of the resource id failed.")
         except instagrapi.exceptions.LoginRequired as e:
@@ -94,10 +98,10 @@ class dInstagram():
                 res=requests.get(url)
                 with open(full_path, "wb") as f:
                     f.write(res.content)
-                med = media(media_path=full_path, resource_id=id)
+                med = media(media_path=full_path, resource_id=id, rtype=self.mediaType()[1])
                 db.session.add(med)
                 db.session.commit()
-                return [True, "File saved at: "+full_path]
+                return [True, full_path]
             else:
                 raise Exception("URL is not valid or doesn't contain a file.")
         except Exception as e:
@@ -128,6 +132,8 @@ class dInstagram():
                         raise Exception("Download failed.")
                 elif type=="Album":
                     status, resources=self.getResources()
+                    print(resources[0])
+                    print("ye ra type:{}".format(type(resources[0])))
                     if(status):
                         res=[]
                         for r in resources:
@@ -143,6 +149,14 @@ class dInstagram():
                             print("Not all files in Album are downloaded.")
                         else:
                             raise Exception("Not all files in Album are downloaded.")
+                        zip_file_path = os.path.join(download_path, 'download{}.zip'.format(self.id))
+                        with zipfile.ZipFile(zip_file_path, 'w') as zipf:
+                            for file_path in res:
+                                # Get only the filename from the file_path
+                                file_name = os.path.basename(file_path)
+                                # Add the file to the ZIP file without any directory structure
+                                zipf.write(file_path, arcname=file_name)
+                        res=zip_file_path
                     else:
                         raise Exception("No resources found in the album.")
                 elif type=="Clips":
@@ -153,6 +167,7 @@ class dInstagram():
                     else:
                         print("Download failed.")
                         raise Exception("Download failed.")
+                    print(res)
                 return [True, res]
             else:
                 raise Exception("Failed to load the type of the resource.")
@@ -170,6 +185,9 @@ insta_views = Blueprint('insta_views', __name__)
 def create_obj():
     try:
         url = request.form.get('url')
+        obj = obj_table.query.filter_by(url=url).first()
+        if obj:
+            return jsonify({'messages': 'Object already present in db.', "id": obj.id})
         obj = obj_table(url=url)
         if request.form.get('username', 0):
             obj.username = request.form.get('username')
@@ -181,16 +199,16 @@ def create_obj():
     except Exception as e:
         return jsonify({"messages": e}), 500
     
-@insta_views.route('/login/<int:id>', methods=['PATCH'])   
+@insta_views.route('/login/<int:id>', methods=['PATCH'])
 def login(id):
     try:
         obj = obj_table.query.get(id)
-        ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
+        ins = dInstagram(postUrl=obj.url)
         username = request.form.get('username')
         password = request.form.get('password')
         status, res = ins.login(username=username, password=password)
         if not status:
-            return jsonify({"messages": res}), 401
+            return jsonify({"messages": str(res)}), 401
         obj.username = username
         obj.password = password
         db.session.commit()
@@ -204,11 +222,10 @@ def getResources(id):
         obj = obj_table.query.get(id)
         ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
         status, res = ins.getResources()
-        print(status, res)
         if status:
             return jsonify(res), 200
         else:
-            return jsonify({"messages": res}), 500
+            return jsonify({"messages": str(res)}), 500
     except Exception as e:
         return jsonify({"messages": e}), 500
     
@@ -221,18 +238,25 @@ def getMediaType(id):
         if status:
             return jsonify(res), 200
         else:
-            return jsonify({"messages": res}), 500
+            return jsonify({"messages": str(res)}), 500
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
 
 @insta_views.route('/<int:id>/download') 
 def download(id):
     try:
         obj = obj_table.query.get(id)
+        mobj = media.query.filter_by(resource_id=obj.id).first()
+        if mobj and os.path.exists(mobj.media_path):
+            print("Media already exists.")
+            return send_file(mobj.media_path, as_attachment=True)
         ins = dInstagram(postUrl=obj.url, username=obj.username, password=obj.password)
         status, res = ins.download()
         if status:
-            return jsonify({"messages": res}), 201
+            med = media(media_path=res, resource_id=id)
+            db.session.add(med)
+            db.session.commit()  
+            return send_file(res, as_attachment=True)
         else:
             return jsonify({"messages": str(res)}), 500
     except Exception as e:
