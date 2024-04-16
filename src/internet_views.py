@@ -57,7 +57,8 @@ def create_url():
         db.session.commit()
         return jsonify({"messages": "Initialized state of the object.", "id": obj.id})
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        print(e)
+        return jsonify({"messages": str(e)}), 500
 
 @internet_views.route('/<int:id>/download', methods=['GET'])
 def download(id):
