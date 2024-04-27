@@ -1,11 +1,12 @@
 from pytube import YouTube
 from pytube import Playlist
 from pytube import Channel
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file, Response
 from . import db 
 from .models import obj_table, media
 import zipfile
 import os
+import re
 
 download_path = os.path.join(os.getcwd(), 'downloads')
 
@@ -132,38 +133,56 @@ def getCaptions(id):
             return jsonify({"messages": "Not a valid id."}), 404
         vid = dVideo(obj.url)
         status, res = vid.getCaptions()
-        #print(status, res)
+        # print(status, res)
         if status:
-            #print(res)
-            return jsonify(str(res)), 200
+            res = list(res)
+            cap={}
+            for i in res:
+                cap[i.code] = i.name
+            print(cap)
+            return jsonify(cap), 200
         else:
             raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
 
 @utube_views.route('/video/<int:id>/captionsList/download/', methods=['GET'])
 def downloadCaption(id):
     try:
+        lang= request.args.get('caption_lang', default='', type=str)
+        print(lang)
         obj = obj_table.query.get(id)
         if not obj:
             return jsonify({"messages": "Not a valid id."}), 404
-        mobj = media.query.filter(media.rtype=="caption", media.resource_id==obj.id).first()
-        if mobj and os.path.exists(mobj.media_path):
-            print("Media already exists.")
-            return send_file(mobj.media_path, as_attachment=True)
+        mobj = media.query.filter(media.rtype=="caption", media.resource_id==obj.id, media.media_path.like(f"%({lang}).srt")).first()
+        # print("MOBJ FETCH ALL: "+str(media.query.filter(media.rtype=="caption", media.resource_id==obj.id).all()))
+        if mobj:
+            if os.path.exists(mobj.media_path):
+                print("Media already exists. Returning: "+ str(mobj.media_path))
+                # print(mobj.media_path)
+                return send_file(mobj.media_path, as_attachment=True)
+            else:
+                print("Media doesn't exists at the location reinitiating download.")
+                vid = dVideo(obj.url)
+                status, res =  vid.downloadCaption(lang)
+                if status:
+                    mobj.media_path = res
+                    db.session.commit()       
+                    return send_file(res, as_attachment=True)
+                else:
+                    raise Exception(res)
+        
         vid = dVideo(obj.url)
-        lang= request.args.get('caption_lang', default='', type=str)
         status, res =  vid.downloadCaption(lang)
-        #print(status,res)
         if status:
-            med = media(media_path=res, resource_id=id, rtype = "caption")
+            med = media(media_path=res, resource_id=id, rtype='caption')
             db.session.add(med)
-            db.session.commit()           
+            db.session.commit()
             return send_file(res, as_attachment=True)
         else:
             raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
     
 @utube_views.route('/video/<int:id>/getStreams/', methods = ['GET'])
 def getStreams(id):
@@ -183,7 +202,8 @@ def getStreams(id):
                 'progressive': stream.is_progressive,
                 'type': stream.type,
                 'includes_audio_track': stream.includes_audio_track,
-                'includes_video_track': stream.includes_video_track
+                'includes_video_track': stream.includes_video_track,
+                'abr': stream.abr if stream.includes_audio_track else None,
                 # Add more attributes as needed
             }
             for stream in res
@@ -193,7 +213,7 @@ def getStreams(id):
         else:
             raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
     
 @utube_views.route('/video/<int:id>/download/<int:itag>/', methods = ['GET'])
 def download_itag(id, itag):
@@ -204,18 +224,45 @@ def download_itag(id, itag):
         mobj = media.query.filter(media.rtype == 'video',media.resource_id==obj.id).first()
         if mobj and os.path.exists(mobj.media_path):
             print("Media already exists.")
-            return send_file(mobj.media_path, as_attachment=True)
+            video_file = mobj.media_path
         vid = dVideo(obj.url)
         status, res =  vid.download(itag)
         if status:
             med = media(media_path=res, resource_id=id, rtype = 'video')
             db.session.add(med)
             db.session.commit()
-            return send_file(res, as_attachment=True)
+            video_file = res
+            range_header = request.headers.get('Range', None)
+            if not range_header: 
+                return send_file(video_file)
+            size = os.path.getsize(video_file)  
+            byte1, byte2 = 0, None
+            # Extract range values from Range header
+            m = re.search('(\d+)-(\d*)', range_header)
+            g = m.groups()
+            if g[0]: byte1 = int(g[0])
+            if g[1]: byte2 = int(g[1])
+            length = size - byte1
+            if byte2 is not None:
+                length = byte2 - byte1
+
+            data = None
+            with open(video_file, 'rb') as f:
+                f.seek(byte1)
+                data = f.read(length)
+
+            rv = Response(data, 
+                        206, 
+                        mimetype="video/mp4", 
+                        content_type="video/mp4", 
+                        direct_passthrough=True)
+            rv.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(byte1, byte1 + length - 1, size))
+
+            return rv
         else:
             raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
     
 @utube_views.route('/playlist/<int:id>/getTitle/', methods=['GET'])
 def getTitlep(id):
@@ -230,7 +277,7 @@ def getTitlep(id):
         else:
             raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
     
 @utube_views.route('/playlist/<int:id>/getNVideos/', methods=['GET'])
 def getVideos(id):
@@ -245,7 +292,7 @@ def getVideos(id):
         else:
             raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
     
 @utube_views.route('/playlist/<int:id>/getQuality/', methods=['GET'])
 def getQuality(id):
@@ -260,7 +307,7 @@ def getQuality(id):
         else:
             raise Exception(res)
     except Exception as e:
-        return jsonify({"messages": e}), 500
+        return jsonify({"messages": str(e)}), 500
     
 @utube_views.route('/playlist/<int:id>/download/<string:resolution>', methods=['GET'])
 def download(id, resolution):
