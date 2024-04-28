@@ -16,7 +16,7 @@ def create_app():
     from .utube_views import utube_views
     from .home_views import home_views
     app.register_blueprint(insta_views, url_prefix='/insta')
-    app.register_blueprint(home_views, url_prefix='/home')
+    app.register_blueprint(home_views, url_prefix='/')
     app.register_blueprint(utube_views, url_prefix='/utube')
     app.register_blueprint(internet_views, url_prefix='/internet')
 
