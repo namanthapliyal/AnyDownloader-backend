@@ -8,7 +8,7 @@ def index():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Flask HTML Rendering</title>
+        <title>Any Downloader API</title>
     </head>
     <body>
         <h1>Hello, This is an downloading service api developed by Naman Thapliyal. Please hit the endpoints for the service.</h1>
