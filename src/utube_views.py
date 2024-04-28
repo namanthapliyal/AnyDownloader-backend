@@ -221,7 +221,7 @@ def download_itag(id, itag):
         obj = obj_table.query.get(id)
         if not obj:
             return jsonify({"messages": "Not a valid id."}), 404
-        mobj = media.query.filter(media.rtype == 'video',media.resource_id==obj.id, media.media_path.like(f"^{itag}%")).first()
+        mobj = media.query.filter(media.rtype == 'video',media.resource_id==obj.id, media.media_path.like(f"%\{itag}-%")).first()
         if mobj:
             if os.path.exists(mobj.media_path):
                 print("Media already exists.")
@@ -236,6 +236,7 @@ def download_itag(id, itag):
                     video_file = res
                 else:
                     raise Exception(res)
+            return send_file(video_file, as_attachment=True)
         else:
             vid = dVideo(obj.url)
             status, res =  vid.download(itag)
@@ -269,8 +270,10 @@ def download_itag(id, itag):
                             content_type="video/mp4", 
                             direct_passthrough=True)
                 rv.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(byte1, byte1 + length - 1, size))
-
+                print("RV"+str(rv))
                 return rv
+            else:
+                raise Exception(res)
     except Exception as e:
         return jsonify({"messages": str(e)}), 500
     
