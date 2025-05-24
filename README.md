@@ -1,30 +1,54 @@
 # Flask App
 
-This is a anyDownloader flask backend which hosts API to download media files from different services like instagram , internet, youtube.
+This is the AnyDownloader Flask backend, which hosts APIs to download media files from various services like Instagram, the internet, and YouTube.
+
+## Pre-requisites
+
+Python 3.11.1
 
 ## Installation
 
-1. Clone the repository:
+### 1. Clone the repository
 
-   ```bash
-   git clone https://github.com/your-username/your-repo.git
-   ```
+```
+git clone https://github.com/namanthapliyal/AnyDownloader-backend
+cd AnyDownloader-backend
+```
 
-2. Install the required dependencies:
+### 2. Create and activate a virtual environment
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+#### 🔹 On Windows:
+
+```
+python -m venv venv
+venv\Scripts\activate
+```
+
+#### 🔹 On macOS/Linux:
+
+```
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```
+pip install -r requirements.txt
+```
 
 ## Usage
 
-1. Start the Flask development server:
+Start the Flask development server:
 
-   ```bash
-   python app.py
-   ```
+```
+python app.py
+```
 
-2. Open your web browser and navigate to `http://localhost:5000`.
+On macOS/Linux, you may need to use python3 instead of python.
+
+Open your browser and navigate to:
+http://localhost:5000
 
 ## Contributing
 
@@ -32,4 +56,4 @@ Contributions are welcome! If you find any issues or have suggestions for improv
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the MIT License.
