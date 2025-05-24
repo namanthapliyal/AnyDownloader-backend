@@ -270,7 +270,6 @@ def download_itag(id, itag):
                             content_type="video/mp4", 
                             direct_passthrough=True)
                 rv.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(byte1, byte1 + length - 1, size))
-                print("RV"+str(rv))
                 return rv
             else:
                 raise Exception(res)
